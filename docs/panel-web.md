@@ -6,6 +6,7 @@
 - `app/service.py`: un único trabajador consulta cada dos segundos. Un bloqueo serializa consultas, cambios de IP y comandos. Las consultas de la web leen una instantánea en memoria: no crean procesos ni conexiones Cast.
 - `app/cast.py`: conexión persistente PyChromecast con reconexión interna; observador propio sin lanzamiento implícito. El controlador multimedia predeterminado se retira. Solo una acción explícita de reproducir/recuperar inicia YouTube; consultar el estado nunca lo hace.
 - `app/protocol.py`: observadores MDX/multimedia y confirmación extraídos del experimento probado. `scripts/Recover-YouTube.py` conserva su interfaz y las pruebas anteriores importando esas funciones.
+- `app/lounge.py`: peticiones HTTPS con timeout a las rutas fijas de YouTube, compartidas por el relay de Render y la omisión local. Incluye `skipAd` sin inicializar la cola ni reintentar comandos.
 - `app/store.py`: SQLite con bloqueo, transacciones y campos permitidos: IP, ID de video, posición, tipo de registro y fecha UTC. Historial visible de hasta 100 entradas; los puntos anteriores siguen en la base. No se guardan URLs originales, tokens, screenId, sesiones, cookies ni respuestas completas.
 - `app/static`: HTML, CSS y JavaScript servidos localmente. Interfaz adaptable, sondeo secuencial y acciones deshabilitadas mientras hay un comando pendiente.
 
@@ -24,6 +25,14 @@ El historial diferencia solicitud enviada, reproducción confirmada y punto guar
 La confirmación de reproducción exige al menos tres observaciones nuevas a lo largo de cuatro segundos, recibidas después de completar el envío, YouTube activo y reciente, mismo ID, `PLAYING` y posición entre la solicitada menos tres segundos y la solicitada más el tiempo transcurrido más cinco segundos. Se rechaza una marca publicitaria detectada. Si `setPlaylist` conserva el tiempo anterior para el mismo video, dentro de esa orden explícita se envía como máximo un `SEEK` cuando hay estado fresco y soporte anunciado; después se comprueba de nuevo la posición. No se fuerza un reinicio de YouTube. La confirmación de Cast no demuestra visualmente ausencia de un anuncio no marcado: el punto de recuperación sigue intacto hasta la confirmación humana. Si no llega evidencia suficiente en 35 segundos, se informa orden enviada sin confirmar. Las fases de lanzamiento/MDX/HTTPS añaden sus propios plazos, por lo que la operación completa puede tardar aproximadamente dos minutos o más según la red; no hay reintentos automáticos de reproducción.
 
 Pausa/reanudación requieren observación fresca, ID, sesión multimedia y capacidad de pausa (bit 1). Se envía la orden directamente al canal actual; se espera un estado nuevo del mismo video, con la misma generación de sesión y el estado esperado. La capacidad anunciada no es prueba de ejecución.
+
+## Omitir anuncio
+
+`POST /api/skip-ad` exige YouTube activo, conexión y estado del receptor de no más de diez segundos, sin exigir metadatos multimedia ni capacidad estándar de pausa. `CastAdapter.skip_ad` obtiene una respuesta MDX nueva, vincula Lounge y comprueba la generación de sesión y aplicación de nuevo antes de enviar `skipAd`. No lanza aplicaciones, no carga videos, no busca posiciones y no escribe historial o puntos guardados. Comparte el bloqueo de operaciones del servicio.
+
+La interfaz permite solicitar la omisión cuando el usuario ve la opción en la TV, aun sin marcas publicitarias. Si el receptor publica una marca, indica **Anuncio detectado**. El resultado devuelve `confirmed: false`: confirma únicamente que se envió la solicitud. YouTube puede no admitir la omisión o ignorarla. No hay reintento ni omisión automática. Para activar esta versión, reinicia el servicio local y recarga el navegador.
+
+Validación del 16 de octubre de 2026: 44 pruebas Python y 13 JavaScript completadas con dispositivos y peticiones simulados. Se comprobó que omitir conserva el historial, admite ausencia de multimedia, rechaza estado antiguo/otra aplicación y no lanza YouTube. La negociación local descarta la referencia MDX al terminar y vuelve a comprobar la sesión antes del comando. La prueba durante un anuncio real queda pendiente.
 
 ## Protección y límites
 

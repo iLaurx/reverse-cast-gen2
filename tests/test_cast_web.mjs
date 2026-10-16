@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import * as core from '../web-cast/core.mjs';
-import {playYouTube, MDX} from '../web-cast/youtube.mjs';
+import {playYouTube, skipYouTubeAd, MDX} from '../web-cast/youtube.mjs';
 
 test('YouTube links and explicit zero preserve requested position', () => {
   for (const url of ['https://youtu.be/abcdefghijk?t=1m30s', 'https://www.youtube.com/watch?v=abcdefghijk&start=90', 'https://youtube.com/shorts/abcdefghijk?t=90']) {
@@ -28,7 +28,7 @@ async function harness({storageBlocked = false} = {}) {
     return elements.get(id);
   }
   const timers = [], intervals = [], listeners = {}, storage = new Map();
-  let active = null, loads = 0, relays = 0, rejectLoad = false, getterFails = false;
+  let active = null, loads = 0, relays = 0, skips = 0, rejectLoad = false, getterFails = false;
   const media = {media: {contentId: 'abcdefghijk', duration: 600}, currentTime: 50, playerState: 'PLAYING', supportsCommand: () => true,
     getStatus(_, ok, fail) { getterFails ? fail({code: 'timeout'}) : ok(); },
     pause(_, ok) { this.playerState = 'PAUSED'; ok(); }, play(_, ok) { this.playerState = 'PLAYING'; ok(); }};
@@ -39,6 +39,7 @@ async function harness({storageBlocked = false} = {}) {
     endCurrentSession(stop) { assert.equal(stop, false); active = null; listeners.session(); }};
   const sandbox = { ...core, console, URL, Date, setTimeout(fn) { timers.push(fn); return timers.length; }, clearTimeout() {}, setInterval(fn) { intervals.push(fn); },
     async playYouTube() { relays++; if (rejectLoad) throw {code: 'youtube_relay_failed'}; },
+    async skipYouTubeAd(_, stillCurrent) { assert.ok(stillCurrent()); skips++; if (rejectLoad) throw {code: 'youtube_relay_failed'}; },
     confirm: () => { throw Error('Unexpected popup'); }, localStorage: {getItem: k => storage.get(k), setItem(k, v) { if (storageBlocked) throw Error(); storage.set(k, v); }, removeItem: k => storage.delete(k)},
     document: {getElementById: el, createElement: () => ({}), head: {append() {}}},
     chrome: {cast: {AutoJoinPolicy: {PAGE_SCOPED: 'PAGE'}, media: {DEFAULT_MEDIA_RECEIVER_APP_ID: 'DEFAULT', MediaCommand: {PAUSE: 'pause'}, MediaInfo: function(id, type) { this.contentId = id; this.contentType = type; }, LoadRequest: function(info) { this.media = info; }}}},
@@ -48,11 +49,11 @@ async function harness({storageBlocked = false} = {}) {
   vm.runInNewContext(source, sandbox);
   const tick = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
   const connect = async () => { sandbox.__onGCastApiAvailable(true); el('connect').onclick(); await tick(); };
-  return {el, sandbox, tick, connect, timers, intervals, media, storage, loads: () => loads, relays: () => relays, failLoad() { rejectLoad = true; }, failStatus() { getterFails = true; }};
+  return {el, sandbox, tick, connect, timers, intervals, media, storage, loads: () => loads, relays: () => relays, skips: () => skips, failLoad() { rejectLoad = true; }, failStatus() { getterFails = true; }};
 }
 test('unavailable SDK keeps all playback controls disabled', async () => {
   const h = await harness(); h.sandbox.__onGCastApiAvailable(false);
-  for (const id of ['connect', 'load', 'pause', 'resume', 'save', 'recover']) assert.equal(h.el(id).disabled, true);
+  for (const id of ['connect', 'load', 'pause', 'resume', 'save', 'recover', 'skip-ad']) assert.equal(h.el(id).disabled, true);
 });
 test('fresh receiver status enables pause; disconnect disables control without stopping TV', async () => {
   const h = await harness(); await h.connect(); assert.equal(h.el('pause').disabled, false);
@@ -72,6 +73,42 @@ test('rejected YouTube load is reported once and never saved as success', async 
 test('storage denial is reported without claiming point was saved', async () => {
   const h = await harness({storageBlocked: true}); await h.connect(); h.el('save').onclick();
   assert.match(h.el('feedback').textContent, /No se guardó/); assert.equal(h.el('recover').disabled, true);
+});
+
+test('manual skip stays available without ad metadata and never overwrites saved point', async () => {
+  const h = await harness(); await h.connect(); h.el('save').onclick();
+  const saved = [...h.storage.values()];
+  h.failStatus(); h.intervals[0](); await h.tick();
+  assert.equal(h.el('skip-ad').disabled, false);
+  h.el('skip-ad').onclick(); h.el('skip-ad').onclick(); await h.tick();
+  assert.equal(h.skips(), 1); assert.equal(h.relays(), 0);
+  assert.match(h.el('feedback').textContent, /Solicitud enviada/);
+  assert.deepEqual([...h.storage.values()], saved);
+  h.el('disconnect').onclick(); assert.equal(h.el('skip-ad').disabled, true);
+});
+
+test('reported ad disables saving and failed skip is never reported as omitted', async () => {
+  const h = await harness(); await h.connect();
+  h.media.breakStatus = {breakClipId: 'ad'}; h.intervals[0](); await h.tick();
+  assert.equal(h.el('save').disabled, true);
+  assert.match(h.el('ad-status').textContent, /Anuncio detectado/);
+  h.failLoad(); h.el('skip-ad').onclick(); await h.tick();
+  assert.equal(h.skips(), 1); assert.match(h.el('feedback').textContent, /No se completó/);
+  delete h.media.breakStatus; h.intervals[0](); await h.tick();
+  assert.equal(h.el('save').disabled, false);
+});
+
+test('skip negotiates MDX and sends only the screen to its dedicated endpoint', async () => {
+  const originalFetch = globalThis.fetch, calls = [];
+  let listener;
+  const s = {addMessageListener(_, fn) { listener = fn; }, removeMessageListener() {},
+    async sendMessage(ns) { listener(ns, {type: 'mdxSessionStatus', data: {screenId: 'simulated-screen'}}); }};
+  globalThis.fetch = async (url, options) => { calls.push({url, options}); return {ok: true}; };
+  try {
+    await skipYouTubeAd(s);
+    assert.equal(calls.length, 2); assert.ok(calls[1].url.endsWith('/api/youtube/skip-ad'));
+    assert.deepEqual(JSON.parse(calls[1].options.body), {screen_id: 'simulated-screen'});
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 test('YouTube negotiates fresh MDX then posts only to the relay', async () => {

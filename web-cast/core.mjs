@@ -1,4 +1,7 @@
 export const STORAGE_KEY = 'cast-web-checkpoint-v1';
+export function adDetected(media) {
+  return media?.breakStatus != null || media?.adBreakStatus != null || media?.media?.isPlayingAd === true;
+}
 export function position(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0 || n > 86400) throw Error('Usa una posición entre 0 y 86400 segundos.');

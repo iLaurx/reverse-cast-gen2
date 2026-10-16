@@ -27,6 +27,14 @@ export function screenId(session, stillCurrent = () => true) {
 }
 
 export async function playYouTube(session, id, position, stillCurrent = () => true) {
+  return youtubeCommand(session, 'play', {video_id: id, position}, stillCurrent);
+}
+
+export async function skipYouTubeAd(session, stillCurrent = () => true) {
+  return youtubeCommand(session, 'skip-ad', {}, stillCurrent);
+}
+
+async function youtubeCommand(session, action, payload, stillCurrent) {
   // Wake the free Render service before asking for a fresh receiver capability.
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), 90000);
@@ -36,9 +44,9 @@ export async function playYouTube(session, id, position, stillCurrent = () => tr
     if (!stillCurrent()) throw {code: 'session_changed'};
     const screen_id = await screenId(session, stillCurrent);
     if (!stillCurrent()) throw {code: 'session_changed'};
-    const response = await fetch(`${RELAY}/api/youtube/play`, {
+    const response = await fetch(`${RELAY}/api/youtube/${action}`, {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({screen_id, video_id: id, position}), signal: abort.signal,
+      body: JSON.stringify({screen_id, ...payload}), signal: abort.signal,
       credentials: 'omit', cache: 'no-store',
     });
     if (!response.ok) throw {code: response.status === 429 ? 'wait_before_retry' : 'youtube_relay_failed'};

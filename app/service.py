@@ -61,6 +61,11 @@ class Service:
                 and raw.get('media') is not None
                 and now - raw['media']['observed_monotonic'] <= 10)
 
+    def can_skip_ad(self, raw):
+        receiver = raw.get('receiver') or {}
+        return (raw['connection'] == 'CONNECTED' and receiver.get('app_id') == '233637DE'
+                and time.monotonic() - receiver['observed_monotonic'] <= 10)
+
     def status(self):
         raw = self.raw()
         now = time.monotonic()
@@ -75,6 +80,7 @@ class Service:
                     app_name=receiver.get('app_name') if receiver else None,
                     receiver_age_s=age(receiver), media_age_s=age(media), stale=not fresh,
                     media=public_media, busy=self.operation.locked(), issue=self.issue,
+                    can_skip_ad=self.can_skip_ad(raw),
                     can_pause=bool(fresh and media.get('commands', 0) & 1 and media.get('media_session_id') is not None and not media.get('ad_detected')),
                     can_resume=bool(fresh and media.get('commands', 0) & 1 and media.get('media_session_id') is not None and not media.get('ad_detected')),
                     checkpoint=self.store.checkpoint(), history=self.store.history(),
@@ -96,6 +102,11 @@ class Service:
             if not self.adapter:
                 raise ServiceError('El Chromecast todavía no está conectado.')
             raw = self.raw()
+            if action == 'skip-ad':
+                if not self.can_skip_ad(raw):
+                    raise ServiceError('Conecta una sesión reciente de YouTube para omitir el anuncio.')
+                self.adapter.skip_ad(raw.get('generation'))
+                return {'message': 'Solicitud de omitir anuncio enviada. Comprueba la TV; YouTube decide si se puede omitir.', 'confirmed': False}
             if action == 'save':
                 media = raw.get('media') or {}
                 if not self.fresh(raw) or not media.get('video_id') or media.get('player_state') not in ('PLAYING','PAUSED'):

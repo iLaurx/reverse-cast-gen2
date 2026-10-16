@@ -146,6 +146,26 @@ class ServiceTests(unittest.TestCase):
             self.service.execute('save', {'content_confirmed':True,'video_id':VIDEO,'position':10})
         self.assertEqual(self.store.checkpoint()['position'],118)
 
+    def test_skip_preserves_point_and_works_without_media_during_ad(self):
+        self.save()
+        original = self.store.history()
+        self.adapter.skip_ad = Mock()
+        self.adapter.data['media'] = None
+        self.assertTrue(self.service.status()['can_skip_ad'])
+        self.assertFalse(self.service.execute('skip-ad', {})['confirmed'])
+        self.adapter.skip_ad.assert_called_once_with(1)
+        self.assertEqual(self.store.history(), original)
+        self.assertFalse(self.adapter.plays)
+        self.adapter.data['receiver']['observed_monotonic'] -= 20
+        self.assertFalse(self.service.status()['can_skip_ad'])
+        with self.assertRaises(ServiceError):
+            self.service.execute('skip-ad', {})
+        self.adapter.data['receiver']['app_id'] = 'E8C28D3C'
+        self.adapter.data['receiver']['observed_monotonic'] = time.monotonic()
+        with self.assertRaises(ServiceError):
+            self.service.execute('skip-ad', {})
+        self.assertEqual(self.adapter.skip_ad.call_count, 1)
+
     def test_same_video_at_wrong_position_uses_one_supported_seek(self):
         self.adapter.mode='stale'
         self.adapter.data['media']['commands']=3
@@ -210,6 +230,32 @@ class ServiceTests(unittest.TestCase):
         self.assertNotIn('SECRET',str(error.exception))
 
 class ObserverTests(unittest.TestCase):
+    @patch('app.cast.LoungeSession')
+    def test_skip_attaches_to_current_session_without_launching(self, lounge):
+        adapter = object.__new__(CastAdapter)
+        adapter.cast = Mock()
+        adapter.cast.socket_client.app_namespaces = ['urn:x-cast:com.google.youtube.mdx']
+        adapter.mdx = SimpleNamespace(screen_id=None, ready=threading.Event())
+        state = {'connection': 'CONNECTED', 'generation': 1,
+                 'receiver': {'app_id': '233637DE', 'observed_monotonic': time.monotonic()}}
+        adapter.snapshot = lambda: state
+        def respond(*args):
+            adapter.mdx.screen_id = 'simulated-screen'
+            adapter.mdx.ready.set()
+        adapter.cast.socket_client.send_app_message.side_effect = respond
+        adapter.skip_ad(1)
+        lounge.return_value.skip_ad.assert_called_once()
+        guard = lounge.return_value.skip_ad.call_args.args[0]
+        self.assertTrue(guard())
+        state['generation'] = 2
+        self.assertFalse(guard())
+        with self.assertRaises(RuntimeError):
+            adapter.skip_ad(1)
+        self.assertEqual(lounge.call_count, 1)
+        self.assertIsNone(adapter.mdx.screen_id)
+        self.assertFalse(adapter.mdx.ready.is_set())
+        adapter.cast.start_app.assert_not_called()
+
     def test_empty_partial_ad_and_application_change(self):
         observer=CastObserver()
         observer.new_cast_status(SimpleNamespace(app_id='233637DE',display_name='YouTube',session_id='private',transport_id='private'))

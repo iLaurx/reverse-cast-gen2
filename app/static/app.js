@@ -28,6 +28,10 @@ function render() {
   $('progress').style.width = m?.duration > 0 ? `${Math.min(100,100*(m.position||0)/m.duration)}%` : '0%';
   $('pause').disabled = busy || s.busy || stale || !s.can_pause || m?.player_state !== 'PLAYING';
   $('resume').disabled = busy || s.busy || stale || !s.can_resume || m?.player_state !== 'PAUSED';
+  $('skip-ad').disabled = busy || s.busy || elapsed > 10 || !s.can_skip_ad || s.receiver_age_s + elapsed > 10;
+  $('ad-status').textContent = m?.ad_detected && !stale
+    ? 'Anuncio detectado. Puedes solicitar que se omita cuando YouTube lo permita.'
+    : 'Cuando aparezca «Omitir anuncio» en la TV, pulsa el botón. Algunos anuncios no se pueden omitir.';
   $('save').disabled = busy || s.busy || stale || !m?.video_id || !m?.position || m.ad_detected || !['PLAYING','PAUSED'].includes(m.player_state);
   $('recover').disabled = busy || s.busy || !s.checkpoint;
   $('checkpoint').textContent = s.checkpoint ? `${s.checkpoint.video_id} · Punto guardado en ${format(s.checkpoint.position)}` : 'Guarda un punto del video para volver a él cuando lo necesites.';
@@ -64,6 +68,7 @@ $('play-form').onsubmit=event=>{event.preventDefault();if(confirm('Reproducir es
 $('host-form').onsubmit=event=>{event.preventDefault();command('host',{host:$('host').value});};
 $('key-form').onsubmit=event=>{event.preventDefault();key=$('key').value;$('key').value='';feedback('Clave aplicada a esta pestaña.');refresh();};
 $('pause').onclick=()=>command('pause');$('resume').onclick=()=>command('resume');$('recover').onclick=()=>recover();
+$('skip-ad').onclick=()=>command('skip-ad');
 $('save').onclick=()=>{const m=state?.media;if(m&&confirm(`¿La TV muestra el video principal ${m.video_id} en ${format(m.position)}, sin anuncios?`))command('save',{content_confirmed:true,video_id:m.video_id,position:m.position});};
 async function poll(){await refresh();setTimeout(poll,2000);}poll();
 setInterval(()=>{if(lastFetch&&Date.now()-lastFetch>10000)render();},1000);

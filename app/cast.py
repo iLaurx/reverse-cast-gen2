@@ -9,6 +9,7 @@ from app.protocol import MDX, MEDIA, SessionObserver
 from pychromecast.controllers import BaseController
 from app.validation import VIDEO
 from app.titles import clean_title
+from app.lounge import LoungeSession
 
 
 def number(value):
@@ -142,6 +143,27 @@ class CastAdapter:
         self.cast.socket_client.send_app_message(MEDIA, {
             'type': 'PAUSE' if action == 'pause' else 'PLAY',
             'mediaSessionId': media['media_session_id']}, inc_session_id=True)
+
+    def skip_ad(self, generation):
+        def still_current():
+            state = self.snapshot()
+            receiver = state.get('receiver') or {}
+            return (state['connection'] == 'CONNECTED' and state['generation'] == generation
+                    and receiver.get('app_id') == '233637DE'
+                    and time.monotonic() - receiver['observed_monotonic'] <= 10)
+
+        if not still_current() or MDX not in self.cast.socket_client.app_namespaces:
+            raise RuntimeError('No hay una sesión reciente de YouTube.')
+        self.mdx.screen_id = None
+        self.mdx.ready.clear()
+        try:
+            self.cast.socket_client.send_app_message(MDX, {'type': 'getMdxSessionStatus'})
+            if not self.mdx.ready.wait(10) or not still_current():
+                raise RuntimeError('La sesión de YouTube dejó de estar disponible.')
+            LoungeSession(self.mdx.screen_id).skip_ad(still_current)
+        finally:
+            self.mdx.screen_id = None
+            self.mdx.ready.clear()
 
     def seek(self, media, position):
         current = self.snapshot()

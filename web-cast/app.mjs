@@ -1,5 +1,5 @@
-import {STORAGE_KEY, youtubeInput, validCheckpoint} from './core.mjs';
-import {playYouTube} from './youtube.mjs';
+import {STORAGE_KEY, youtubeInput, validCheckpoint, adDetected} from './core.mjs';
+import {playYouTube, skipYouTubeAd} from './youtube.mjs';
 const $ = id => document.getElementById(id);
 const fmt = n => Number.isFinite(n) ? `${Math.floor(n / 60)}:${String(Math.floor(n % 60)).padStart(2, '0')}` : '—';
 let context, ready = false, busy = false, observed = null, checkpoint = null, polling = false;
@@ -14,7 +14,7 @@ function log(text) {
 try { const p = JSON.parse(localStorage.getItem(STORAGE_KEY)); if (validCheckpoint(p)) checkpoint = p; } catch { /* Storage may be disabled. */ }
 function current() {
   const s = session();
-  return observed && observed.session === s && Date.now() - observed.at < 10000 ? observed : null;
+  return observed && observed.session === s && observed.media === s?.getMediaSession() && Date.now() - observed.at < 10000 ? observed : null;
 }
 function render() {
   const s = session(), o = current(), m = o?.media;
@@ -30,9 +30,13 @@ function render() {
   const canPause = !!m?.supportsCommand(chrome.cast.media.MediaCommand.PAUSE);
   $('pause').disabled = busy || !canPause || m.playerState !== 'PLAYING';
   $('resume').disabled = busy || !canPause || m.playerState !== 'PAUSED';
+  $('skip-ad').disabled = busy || !s;
+  $('ad-status').textContent = adDetected(m)
+    ? 'Anuncio detectado. Puedes solicitar que se omita cuando YouTube lo permita.'
+    : 'Cuando aparezca «Omitir anuncio» en la TV, pulsa el botón. Algunos anuncios no se pueden omitir.';
   const id = m?.media?.contentId;
   const recognized = /^[A-Za-z0-9_-]{11}$/.test(id || '');
-  $('save').disabled = busy || !recognized || !o || !(o.position > 0 && o.position <= 86400) || !['PLAYING', 'PAUSED'].includes(m.playerState);
+  $('save').disabled = busy || adDetected(m) || !recognized || !o || !(o.position > 0 && o.position <= 86400) || !['PLAYING', 'PAUSED'].includes(m.playerState);
   $('recover').disabled = busy || !s || !checkpoint;
   $('clear').disabled = !checkpoint;
   $('checkpoint').textContent = checkpoint ? `${checkpoint.id} · ${fmt(checkpoint.position)}` : 'Todavía no guardaste un punto.';
@@ -71,7 +75,7 @@ async function load(id, time) {
   if (s !== session() || g !== generation) return;
   await poll();
   const o = current();
-  if (o?.media.media?.contentId === id && o.media.playerState === 'PLAYING' && Math.abs(o.position - time) <= 10) {
+  if (o?.media.media?.contentId === id && !adDetected(o.media) && o.media.playerState === 'PLAYING' && Math.abs(o.position - time) <= 10) {
     say('El receptor reporta el video en reproducción cerca del punto solicitado. Confírmalo en la TV.'); log('Receptor reporta video y posición solicitados.');
   } else { say('Orden aceptada; video y posición todavía sin confirmar. Revisa la TV.'); log('Orden aceptada sin confirmar reproducción ni posición.'); }
 }
@@ -79,6 +83,15 @@ $('connect').onclick = () => {
   operation(async () => { await context.requestSession(); log('Sesión Cast abierta.'); say('Conectado. Ahora puedes probar la reproducción.'); });
 };
 $('disconnect').onclick = () => { context.endCurrentSession(false); observed = null; generation++; render(); };
+$('skip-ad').onclick = () => operation(async () => {
+  const s = session(), g = generation;
+  if (!s) throw {code: 'session_changed'};
+  say('Solicitando omitir anuncio… El servicio puede tardar en activarse.');
+  await skipYouTubeAd(s, () => s === session() && g === generation);
+  say('Solicitud enviada. Comprueba la TV; YouTube decide si el anuncio se puede omitir.');
+  log('Solicitud de omitir anuncio enviada; resultado en la TV sin confirmar.');
+  await poll();
+});
 $('play-form').onsubmit = e => { e.preventDefault(); operation(async () => {
   const p = youtubeInput($('url').value.trim(), $('position').value);
   await load(p.id, p.position);

@@ -8,6 +8,14 @@ Abre [Cast web en Render](https://reverse-cast-web.onrender.com/) desde un naveg
 
 La carpeta `web-cast/` contiene el panel de YouTube adaptado a celular, sin video de muestra ni cuadros de confirmación. El navegador conecta con el Chromecast en tu Wi-Fi y una API en Render envía los videos mediante la sesión MDX/Lounge. No necesitas mantener una PC intermediaria encendida. Incluye pausa/reanudación y un punto guardado por navegador. `render.yaml` define el sitio estático y la API Python.
 
+### Omitir anuncios
+
+Los dos paneles incluyen **Omitir anuncio**. Conecta YouTube y pulsa el botón cuando la TV permita omitir el anuncio. Se solicita `skipAd` mediante la sesión MDX/Lounge actual; esta acción no carga otro video, no busca una posición ni reemplaza la cola o el punto guardado. YouTube decide si el anuncio admite omisión.
+
+El botón permanece disponible durante la sesión porque YouTube no siempre publica metadatos de anuncios. Cuando el receptor sí informa una pausa publicitaria, la página indica **Anuncio detectado**. No hay detección completa ni omisión automática. Una solicitud enviada no confirma que el anuncio haya desaparecido: compruébalo en la TV.
+
+La implementación del 16 de octubre de 2026 pasó 44 pruebas Python y 13 JavaScript con respuestas simuladas. Falta comprobar `skipAd` durante un anuncio real en este Chromecast. Para verlo en Render hay que desplegar **ambos servicios**, web y relay, desde esta versión; editar estos archivos no actualiza por sí solo la publicación. Para el panel local, reinicia el servicio y recarga la página. Consulta [funcionamiento y límites](docs/cast-web.md#omitir-anuncios).
+
 El propietario confirmó la conexión Cast de la primera versión, pero la orden multimedia estándar no iniciaba el video. Se sustituyó por MDX/Lounge; el envío y la posición con esta ruta requieren comprobación en la TV. El panel Python funcional de abajo se conserva. Consulta [publicación, límites y prueba en la TV](docs/cast-web.md).
 
 ## Panel web local
@@ -30,7 +38,7 @@ Pega el enlace y pulsa **Reproducir**. Acepta `watch`, `youtu.be`, `shorts`, `li
 
 **Guardar este punto** pide confirmar que la TV muestra el video principal sin anuncios. **Continuar donde iba** utiliza el último punto guardado, y el historial permite elegir anteriores. El estado actual nunca sustituye automáticamente ese punto: la ausencia de metadatos de anuncios no demuestra que sea contenido principal. Los puntos sobreviven a timeouts, desconexiones, Backdrop, ceros temporales y reinicios del servicio. No hay recuperación automática.
 
-Iniciar o recuperar puede reemplazar la cola. Pausa y reanudación requieren una sesión reciente y la capacidad de pausa anunciada. El panel distingue orden enviada y resultado confirmado; si vence el plazo, revisa la TV antes de repetir. No elimina anuncios ni corrige la causa del cierre.
+Iniciar o recuperar puede reemplazar la cola. Pausa y reanudación requieren una sesión reciente y la capacidad de pausa anunciada. El panel distingue orden enviada y resultado confirmado; si vence el plazo, revisa la TV antes de repetir. Omitir anuncio solicita la función de YouTube; no bloquea publicidad ni corrige la causa del cierre.
 
 El historial y la IP se guardan en `data/history.sqlite3`, excluido de Git. Para respaldarlos, detén el servicio y copia `data`. No se importó automáticamente el progreso de los experimentos anteriores. No se persisten credenciales de YouTube ni información de sesiones Cast. Los IDs de video y puntos guardados sí revelan historial de uso local.
 

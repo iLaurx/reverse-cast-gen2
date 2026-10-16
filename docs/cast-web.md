@@ -23,6 +23,39 @@ Se retiraron el video de muestra, el selector de modos y los cuadros `confirm` d
 
 Desconectar el navegador no envía STOP a la TV. Cerrar la página impide seguir actualizando el estado o ejecutar órdenes. Chrome en iOS no admite Web Sender; los navegadores integrados en otras apps pueden no exponer Cast.
 
+## Omitir anuncios
+
+La revisión del código identifica tres capas: el navegador mantiene la sesión Cast con el receptor YouTube (`233637DE`); MDX obtiene un `screenId` temporal; el relay usa ese identificador para vincular un control Lounge y enviar órdenes HTTPS a YouTube. El Chromecast reproduce el contenido; Render envía las órdenes y no transmite el video ni se conecta a la IP privada de la TV. No hay un volcado del firmware que permita describir su implementación interna completa.
+
+```mermaid
+sequenceDiagram
+    participant U as Usuario
+    participant W as Panel web
+    participant C as YouTube en Chromecast
+    participant R as Relay en Render
+    participant Y as YouTube Lounge
+    U->>W: Omitir anuncio
+    W->>R: Despertar servicio (/health)
+    W->>C: getMdxSessionStatus
+    C-->>W: screenId temporal
+    W->>R: POST /api/youtube/skip-ad
+    R->>Y: Obtener token y vincular control
+    R->>Y: skipAd
+    Y-->>R: Respuesta al envío
+    R-->>W: Solicitud enviada; resultado sin confirmar
+    Note over C,Y: El receptor decide si el anuncio se puede omitir
+```
+
+**Omitir anuncio** se habilita al conectar una sesión y se bloquea mientras hay otra orden. No depende de una sesión multimedia identificable, que puede faltar durante un anuncio. Si hay `breakStatus`, `adBreakStatus` o `media.isPlayingAd`, la página indica **Anuncio detectado** y bloquea guardar ese tiempo como punto del video. La ausencia de esas marcas mantiene disponible el intento manual; no permite deducir que sea contenido principal ni habilita una omisión automática.
+
+`web-cast/youtube.mjs` comparte con reproducir el despertar del relay, la negociación MDX, el plazo de 90 segundos y la comprobación de que la sesión siga siendo la misma antes del envío. El endpoint nuevo acepta exclusivamente `screen_id`; no acepta ID de video, posición, URLs, IP ni comandos arbitrarios. Comparte validación, Origin, límites de tamaño, concurrencia y espera de tres segundos entre órdenes con reproducir.
+
+`app/lounge.py` extiende CastTube con `skip_ad`: obtiene el token, vincula el control y envía una sola orden `skipAd`, sin `setPlaylist`, `SEEK`, `next`, lanzamiento ni reintentos. La respuesta HTTP solo acredita el envío al servicio. Los anuncios no omitibles o un receptor incompatible pueden ignorarlo. No se promete que la TV haya vuelto al contenido y no se cambia el punto guardado.
+
+El comando está documentado en el [código de PyYtLounge](https://pyytlounge.readthedocs.io/en/stable/_modules/pyytlounge/wrapper.html#YtLoungeApi.skip_ad). No se añadió esa biblioteca como dependencia: se usa la sesión CastTube ya instalada. Los [metadatos de pausas de Google Cast](https://developers.google.com/cast/docs/web_receiver/ad_breaks) explican la señal publicitaria, pero no garantizan que YouTube la publique en todas sus sesiones. Esta integración requiere probarse con un anuncio real del Chromecast del propietario.
+
+Para actualizar Render se deben desplegar el sitio estático **y** el relay de esta versión. Una web nueva con un relay anterior recibirá error al pulsar el botón. El servicio gratuito puede tardar en despertar y el anuncio podría terminar durante esa espera.
+
 ## Render
 
 El Blueprint define dos servicios:
@@ -41,7 +74,7 @@ node --test tests/test_cast_web.mjs
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Pasaron 10 pruebas JavaScript y 39 Python con receptores y respuestas upstream simulados. Comprueban MDX antes del envío, pérdida de sesión, ausencia de LOAD para YouTube, errores sin reintentos, protección HTTP y conservación del punto. Las pruebas no afirman reproducción real con el cambio nuevo.
+El 16 de octubre de 2026 pasaron 13 pruebas JavaScript y 44 Python con receptores y respuestas upstream simulados. Comprueban MDX antes del envío, pérdida de sesión, ausencia de LOAD para YouTube, errores sin reintentos, protección HTTP y conservación del punto. Las pruebas nuevas cubren la orden `skipAd`, su endpoint, limitación compartida, rechazo de una sesión local cambiada, uso sin metadatos multimedia y bloqueo de guardado al detectar anuncios. Se comprobó visualmente el botón en la vista estrecha del navegador, sin conectar ni controlar la TV. `pip check` no encontró dependencias rotas. Las pruebas no afirman omisión real de anuncios con este cambio.
 
 ## Referencias
 

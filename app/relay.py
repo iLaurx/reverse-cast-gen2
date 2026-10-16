@@ -5,9 +5,7 @@ import threading
 import time
 from collections import OrderedDict
 
-import requests
-from casttube import YouTubeSession
-from casttube.YouTubeSession import BIND_URL, HEADERS, LOUNGE_TOKEN_URL
+from app.lounge import LoungeSession
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,28 +20,14 @@ recent = OrderedDict()
 recent_lock = threading.Lock()
 
 
-class Play(BaseModel):
+class Screen(BaseModel):
     model_config = ConfigDict(extra='forbid', hide_input_in_errors=True)
     screen_id: str = Field(min_length=1, max_length=256, pattern=r'^[A-Za-z0-9_-]+$')
+
+
+class Play(Screen):
     video_id: str = Field(pattern=r'^[A-Za-z0-9_-]{11}$')
     position: float = Field(default=0, ge=0, le=86400, allow_inf_nan=False)
-
-
-class LoungeSession(YouTubeSession):
-    def _do_post(self, url, data=None, params=None, headers=None, session_request=False):
-        # CastTube's default has no timeout and may rebind after an error.
-        # One explicit request only; do not replay an uncertain media command.
-        if url not in (LOUNGE_TOKEN_URL, BIND_URL):
-            raise ValueError('Unsupported endpoint')
-        response = requests.post(url, data=data, params=params,
-                                 headers={**HEADERS, **(headers or {})},
-                                 timeout=(5, 10), allow_redirects=False)
-        if response.status_code != 200:
-            raise ValueError('Upstream rejected request')
-        if session_request:
-            self._req_count += 1
-        self._rid += 1
-        return response
 
 
 @api.exception_handler(RequestValidationError)
@@ -79,6 +63,15 @@ def health():
 
 @api.post('/api/youtube/play')
 def play(body: Play):
+    return send(body, 'play')
+
+
+@api.post('/api/youtube/skip-ad')
+def skip_ad(body: Screen):
+    return send(body, 'skip-ad')
+
+
+def send(body, action):
     # A screen ID is a short-lived control capability, never an account login.
     # Retain only a digest briefly for throttling, never its original value.
     digest = hashlib.sha256(body.screen_id.encode()).digest()
@@ -96,6 +89,9 @@ def play(body: Play):
             recent.popitem(last=False)
     try:
         lounge = LoungeSession(body.screen_id)
+        if action == 'skip-ad':
+            lounge.skip_ad()
+            return {'message': 'Solicitud de omitir anuncio enviada. Comprueba la TV; YouTube decide si se puede omitir.', 'confirmed': False}
         lounge.play_video(body.video_id, start_time=str(body.position))
         return {'message': 'Orden enviada a YouTube. Esperando el estado del Chromecast.'}
     except Exception:

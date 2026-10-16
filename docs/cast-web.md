@@ -1,49 +1,51 @@
-# Prueba web de Google Cast y Render
+# Cast web: YouTube desde el navegador
 
-Esta versión comprueba la arquitectura **Render → navegador → Chromecast en la misma Wi-Fi**, sin un servicio Python ni una PC intermediaria. Los archivos publicados son únicamente los de `web-cast/`. El panel Python original permanece disponible con `python -m app`.
+Sitio: [Cast web](https://reverse-cast-web.onrender.com/).
 
-## Qué se puede comprobar
+El navegador conecta con el Chromecast en la misma Wi-Fi. Para reproducir YouTube obtiene una sesión MDX del receptor y la envía por HTTPS a la API en Render. La API negocia Lounge y envía `setPlaylist` con el ID y la posición. No usa direcciones privadas desde Render y no requiere una PC intermediaria. El panel local Python original se conserva.
 
-1. Abrir la página HTTPS en Chrome con soporte Cast, conectado a la misma Wi-Fi que el Chromecast. Permitir acceso a red local si el navegador lo solicita. Los navegadores integrados en otras apps pueden no exponer Cast; Chrome en iOS no admite casting mediante Web Sender.
-2. Seleccionar **Conexión Cast · video de muestra**, pulsar **Seleccionar Chromecast** y elegir el equipo. La conexión puede abrir otra aplicación en la TV.
-3. Pulsar **Reproducir muestra**. Comprobar imagen en TV, pausa, reanudación y posición. El video es Big Buck Bunny desde un archivo público de Google.
-4. Guardar manualmente un punto cuando la TV muestre el contenido principal y volver a él. Se guarda solo en el almacenamiento de ese navegador y origen; no sincroniza Android y laptop ni importa SQLite.
-5. Desconectar el navegador, elegir **YouTube · experimental**, reconectar y probar un enlace. Anotar si acepta la sesión, si reproduce el ID correcto y si respeta la posición. Una conexión exitosa o una orden aceptada no prueban reproducción correcta.
+## Cambio de reproducción
 
-El modo YouTube usa el ID de receptor `233637DE` observado en el proyecto y prueba `LOAD` con un ID validado y tipo `x-youtube/video`. **Es un experimento, no una integración oficial de YouTube ni una equivalencia con PyChromecast/CastTube.** La ruta Python obtiene una sesión MDX/Lounge; esa negociación no se ha trasladado al navegador. Si YouTube rechaza `LOAD` o no expone un estado multimedia utilizable, esa función no queda resuelta por alojar la web en Render. El receptor estándar de la muestra no reproduce páginas `watch` de YouTube.
+La primera prueba abría el receptor YouTube pero usaba `loadMedia` con `x-youtube/video`. El propietario confirmó que la TV quedaba lista para transmitir sin abrir el video. Se sustituyó esa ruta por el intercambio MDX/Lounge que utiliza el controlador local: `getMdxSessionStatus` en el navegador y CastTube en el servidor.
 
-Los controles dependen de un estado recibido hace menos de diez segundos y de la capacidad de pausa anunciada. No se reenvían órdenes automáticamente tras errores o plazos vencidos. Los puntos no se actualizan automáticamente. Un cambio reportado por Cast requiere comprobación visual, especialmente durante anuncios. Cerrar/desconectar la web no envía `STOP`; el navegador ya no podrá actualizar el estado ni ejecutar órdenes.
+La API solo acepta la URL de origen del panel, JSON acotado, un ID de video válido, una posición finita y una sesión temporal. No admite URLs de destino ni IP del dispositivo. Conecta únicamente a las rutas HTTPS fijas de YouTube, con tiempos límite y sin seguir redirecciones. No guarda sesiones ni tokens; conserva brevemente un digest de sesión para limitar órdenes repetidas. Los errores no incluyen credenciales. Origin limita el acceso desde otras webs; la capacidad de control sigue siendo el identificador de sesión obtenido del Chromecast, no una cuenta de usuario.
 
-## Publicación en Render
+El servicio gratuito puede tardar en despertar. Antes de pedir una sesión MDX nueva, el panel consulta `/health`. El envío completo tiene un plazo de 90 segundos y no se reintenta automáticamente. Una respuesta HTTP correcta confirma el envío, no que el video o la posición sean correctos en la TV. Esta integración usa un protocolo no oficial de YouTube que puede cambiar; sigue requiriendo comprobación real con el dispositivo.
 
-Sitio publicado: [https://reverse-cast-web.onrender.com/](https://reverse-cast-web.onrender.com/). Se comprobó la carga HTTPS del panel y del SDK de Google Cast en el navegador, sin errores registrados en consola durante esa comprobación. El primer despliegue de `843c4c2` terminó como **Live**. Esto no prueba descubrimiento ni reproducción en el Chromecast del propietario.
+## Uso en celular
 
-El `render.yaml` de la raíz define un **Static Site**, sin disco, base de datos, secretos ni servidor Python.
+1. Abrir el sitio en Chrome compatible con Cast, conectado a la Wi-Fi del Chromecast.
+2. Pulsar **Seleccionar Chromecast**. El selector y los permisos pertenecen al navegador y no pueden eliminarse desde el panel.
+3. Pegar un enlace de YouTube y pulsar **Enviar a mi TV**. El nuevo video reemplaza la reproducción actual.
+4. Comprobar imagen, pausa y posición en la TV. **Guardar punto sin anuncios** guarda la posición manualmente en este navegador; no se sincroniza entre dispositivos ni se importa SQLite.
 
-Desde Render, crear un Blueprint a partir de este repositorio y revisar que publique `web-cast`. Alternativamente crear un **Static Site** manualmente con:
+Se retiraron el video de muestra, el selector de modos y los cuadros `confirm` del panel. Guardar el punto ya no abre una confirmación: el botón identifica la acción y exige que el propietario compruebe el contenido principal, sin anuncios. No se guarda automáticamente. La vista de celular usa una columna, controles táctiles de al menos 48 px e inputs de 16 px. Ayuda y detalles de envíos se despliegan dentro de la página.
 
-| Campo | Valor |
-| --- | --- |
-| Repository | `https://github.com/iLaurx/reverse-cast-gen2` |
-| Branch | `main` |
-| Build Command | `node --check web-cast/app.mjs` |
-| Publish Directory | `web-cast` |
+Desconectar el navegador no envía STOP a la TV. Cerrar la página impide seguir actualizando el estado o ejecutar órdenes. Chrome en iOS no admite Web Sender; los navegadores integrados en otras apps pueden no exponer Cast.
 
-No usar el inicio de FastAPI para este despliegue. No es necesario registrar el Default Media Receiver ni abrir puertos del router. No introducir claves del panel local en esta página. La publicación inicial se creó desde el formulario Static Site; sus tres cabeceras se configuraron también en Render. El Blueprint queda disponible para reproducir la configuración en otro despliegue.
+## Render
 
-## Validación automatizada
+El Blueprint define dos servicios:
+
+| Servicio | Tipo | Configuración |
+| --- | --- | --- |
+| reverse-cast-web | Static Site | Build `node --check web-cast/app.mjs`; publicar `web-cast` |
+| reverse-cast-relay | Web Service Python, Free | Build `pip install -r requirements-relay.txt`; inicio `python -m uvicorn app.relay:api --host 0.0.0.0 --port $PORT --workers 1 --no-access-log`; salud `/health` |
+
+El relay usa `PYTHON_VERSION=3.12.7` y `CAST_SITE_ORIGIN=https://reverse-cast-web.onrender.com`. Su dirección pública se configura en `web-cast/youtube.mjs`. No necesita disco, claves de YouTube ni base de datos.
+
+## Validación
 
 ```powershell
-node --check web-cast/app.mjs
 node --test tests/test_cast_web.mjs
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Las pruebas usan un SDK/receptor simulado: verifican validación de enlaces, aislamiento del punto, pérdida de estado, desconexión sin detener TV, errores de reproducción y almacenamiento bloqueado. No verifican descubrimiento real, compatibilidad de Android ni reproducción real de YouTube. Estas últimas comprobaciones requieren el navegador y la TV del propietario.
+Pasaron 10 pruebas JavaScript y 39 Python con receptores y respuestas upstream simulados. Comprueban MDX antes del envío, pérdida de sesión, ausencia de LOAD para YouTube, errores sin reintentos, protección HTTP y conservación del punto. Las pruebas no afirman reproducción real con el cambio nuevo.
 
 ## Referencias
 
-- [Integración oficial de Web Sender](https://developers.google.com/cast/docs/web_sender/integrate).
-- [Compatibilidad y HTTPS de Web Sender](https://developers.google.com/cast/docs/web_sender).
-- [Referencia Media de Web Sender](https://developers.google.com/cast/docs/reference/web_sender/chrome.cast.media.Media).
-- [Static Sites de Render](https://render.com/docs/static-sites).
+- [Mensajes personalizados de CastSession](https://developers.google.com/cast/docs/reference/web_sender/cast.framework.CastSession).
+- [Controlador YouTube de PyChromecast](https://github.com/home-assistant-libs/pychromecast/blob/master/pychromecast/controllers/youtube.py).
+- [CastTube](https://github.com/ur1katz/casttube).
 - [Blueprint YAML de Render](https://render.com/docs/blueprint-spec).

@@ -1,5 +1,17 @@
 services:
   - type: web
+    name: reverse-cast-relay
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-relay.txt
+    startCommand: python -m uvicorn app.relay:api --host 0.0.0.0 --port $PORT --workers 1 --no-access-log
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: CAST_SITE_ORIGIN
+        value: https://reverse-cast-web.onrender.com
+  - type: web
     name: reverse-cast-web
     runtime: static
     buildCommand: node --check web-cast/app.mjs

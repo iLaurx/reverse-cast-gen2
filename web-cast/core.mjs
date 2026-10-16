@@ -1,4 +1,3 @@
-export const DEMO_URL = 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
 export const STORAGE_KEY = 'cast-web-checkpoint-v1';
 export function position(value) {
   const n = Number(value);
@@ -26,7 +25,7 @@ export function youtubeInput(value, override = '') {
   return {id, position: position(time)};
 }
 export function validCheckpoint(p) {
-  return !!p && ['demo', 'youtube'].includes(p.mode) && typeof p.id === 'string'
-    && (p.mode === 'demo' ? p.id === DEMO_URL : /^[A-Za-z0-9_-]{11}$/.test(p.id))
+  return !!p && p.mode === 'youtube' && typeof p.id === 'string'
+    && /^[A-Za-z0-9_-]{11}$/.test(p.id)
     && typeof p.position === 'number' && Number.isFinite(p.position) && p.position > 0 && p.position <= 86400;
 }

@@ -1,4 +1,5 @@
-import {DEMO_URL, STORAGE_KEY, position, youtubeInput, validCheckpoint} from './core.mjs';
+import {STORAGE_KEY, youtubeInput, validCheckpoint} from './core.mjs';
+import {playYouTube} from './youtube.mjs';
 const $ = id => document.getElementById(id);
 const fmt = n => Number.isFinite(n) ? `${Math.floor(n / 60)}:${String(Math.floor(n % 60)).padStart(2, '0')}` : '—';
 let context, ready = false, busy = false, observed = null, checkpoint = null, polling = false;
@@ -17,7 +18,6 @@ function current() {
 }
 function render() {
   const s = session(), o = current(), m = o?.media;
-  $('mode').disabled = busy || !!s;
   $('connect').disabled = !ready || busy || !!s;
   $('disconnect').disabled = !s || busy;
   $('load').disabled = !s || busy;
@@ -31,20 +31,11 @@ function render() {
   $('pause').disabled = busy || !canPause || m.playerState !== 'PLAYING';
   $('resume').disabled = busy || !canPause || m.playerState !== 'PAUSED';
   const id = m?.media?.contentId;
-  const recognized = $('mode').value === 'demo' ? id === DEMO_URL : /^[A-Za-z0-9_-]{11}$/.test(id || '');
+  const recognized = /^[A-Za-z0-9_-]{11}$/.test(id || '');
   $('save').disabled = busy || !recognized || !o || !(o.position > 0 && o.position <= 86400) || !['PLAYING', 'PAUSED'].includes(m.playerState);
-  $('recover').disabled = busy || !s || !checkpoint || checkpoint.mode !== $('mode').value;
+  $('recover').disabled = busy || !s || !checkpoint;
   $('clear').disabled = !checkpoint;
-  $('checkpoint').textContent = checkpoint ? `${checkpoint.mode === 'demo' ? 'Video de muestra' : checkpoint.id} · ${fmt(checkpoint.position)}` : 'Todavía no guardaste un punto.';
-}
-function modeChanged() {
-  const youtube = $('mode').value === 'youtube';
-  $('youtube-fields').hidden = !youtube;
-  $('mode-label').textContent = youtube ? 'YouTube · experimental' : 'Video de muestra';
-  $('load').textContent = youtube ? 'Probar video de YouTube' : 'Reproducir muestra';
-  $('mode-note').textContent = youtube ? 'Esta prueba solicita el receptor de YouTube. No garantiza reproducir enlaces ni recuperar posiciones.' : 'Usa un video público de muestra para comprobar conexión, pausa y recuperación.';
-  if (ready) context.setOptions({receiverApplicationId: youtube ? '233637DE' : chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID, autoJoinPolicy: chrome.cast.AutoJoinPolicy.PAGE_SCOPED});
-  observed = null; generation++; render();
+  $('checkpoint').textContent = checkpoint ? `${checkpoint.id} · ${fmt(checkpoint.position)}` : 'Todavía no guardaste un punto.';
 }
 function code(error) { return String(error?.code || (typeof error === 'string' ? error : 'error')).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60); }
 async function operation(fn) {
@@ -72,13 +63,11 @@ async function poll() {
 }
 async function load(id, time) {
   const s = session(); if (!s) throw Error('No hay sesión');
-  if (!confirm('Enviar este video puede reemplazar lo que se reproduce en la TV. ¿Continuar?')) return;
   const g = generation;
-  const info = new chrome.cast.media.MediaInfo(id, $('mode').value === 'youtube' ? 'x-youtube/video' : 'video/mp4');
-  const req = new chrome.cast.media.LoadRequest(info); req.currentTime = time; req.autoplay = true;
-  say('Enviando orden al Chromecast…');
-  // A timeout is uncertain: never retry a media command automatically.
-  await Promise.race([s.loadMedia(req), new Promise((_, reject) => setTimeout(() => reject({code: 'timeout'}), 20000))]);
+  observed = null;
+  say('Conectando con YouTube… El primer envío puede tardar hasta un minuto y medio.');
+  await playYouTube(s, id, time, () => s === session() && g === generation);
+  log('Orden enviada mediante la sesión YouTube.');
   if (s !== session() || g !== generation) return;
   await poll();
   const o = current();
@@ -86,14 +75,12 @@ async function load(id, time) {
     say('El receptor reporta el video en reproducción cerca del punto solicitado. Confírmalo en la TV.'); log('Receptor reporta video y posición solicitados.');
   } else { say('Orden aceptada; video y posición todavía sin confirmar. Revisa la TV.'); log('Orden aceptada sin confirmar reproducción ni posición.'); }
 }
-$('mode').onchange = modeChanged;
 $('connect').onclick = () => {
-  if (!confirm('Conectar puede abrir la aplicación seleccionada y cambiar lo que aparece en la TV. ¿Continuar?')) return;
   operation(async () => { await context.requestSession(); log('Sesión Cast abierta.'); say('Conectado. Ahora puedes probar la reproducción.'); });
 };
 $('disconnect').onclick = () => { context.endCurrentSession(false); observed = null; generation++; render(); };
 $('play-form').onsubmit = e => { e.preventDefault(); operation(async () => {
-  const p = $('mode').value === 'youtube' ? youtubeInput($('url').value.trim(), $('position').value) : {id: DEMO_URL, position: position($('position').value)};
+  const p = youtubeInput($('url').value.trim(), $('position').value);
   await load(p.id, p.position);
 }); };
 for (const action of ['pause', 'resume']) $(action).onclick = () => operation(async () => {
@@ -105,8 +92,8 @@ for (const action of ['pause', 'resume']) $(action).onclick = () => operation(as
 });
 $('save').onclick = () => {
   const o = current(); if (!o || $('save').disabled) return;
-  const p = {mode: $('mode').value, id: o.media.media.contentId, position: o.position};
-  if (!validCheckpoint(p) || !confirm(`¿La TV muestra el contenido principal en ${fmt(p.position)}, sin anuncios?`)) return;
+  const p = {mode: 'youtube', id: o.media.media.contentId, position: o.position};
+  if (!validCheckpoint(p)) return;
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); checkpoint = p; say('Punto guardado en este navegador.'); }
   catch { say('El navegador no permite guardar el punto. No se guardó.'); }
   render();
@@ -122,9 +109,10 @@ window.__onGCastApiAvailable = available => {
   context.addEventListener(cast.framework.CastContextEventType.CAST_STATE_CHANGED, () => {
     $('sdk-status').textContent = context.getCastState() === cast.framework.CastState.NO_DEVICES_AVAILABLE ? 'No se detectan dispositivos. Revisa la Wi-Fi, los permisos de red local y que Chromecast esté encendido.' : 'Google Cast disponible. Selecciona tu Chromecast.';
   });
-  modeChanged(); $('sdk-status').textContent = 'Google Cast cargado. Selecciona tu Chromecast.';
+  context.setOptions({receiverApplicationId: '233637DE', autoJoinPolicy: chrome.cast.AutoJoinPolicy.PAGE_SCOPED});
+  render(); $('sdk-status').textContent = 'Listo para conectar con tu Chromecast.';
 };
-modeChanged();
+render();
 if (!window.isSecureContext) $('sdk-status').textContent = 'Abre esta web mediante HTTPS o localhost para usar Cast.';
 else {
   const script = document.createElement('script');

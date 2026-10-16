@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Cast · Desde tu navegador</title>
+  <link rel="stylesheet" href="style.css"><script type="module" src="app.mjs"></script>
+</head>
+<body>
+<header><a class="brand" href="./">▣ cast.</a><span class="local">EN TU WI-FI</span></header>
+<main>
+  <section class="intro"><p class="eyebrow">DESDE TU NAVEGADOR</p><h1>Tu pantalla.<br><span>Sin una PC de por medio.</span></h1><p>Conecta este dispositivo a la misma Wi-Fi que tu Chromecast.</p></section>
+  <div class="layout"><div class="primary">
+    <section class="card">
+      <div class="section-heading"><h2>Conecta tu Chromecast</h2><span class="tag">Prueba de compatibilidad</span></div>
+      <label for="mode">Qué quieres probar</label>
+      <select id="mode"><option value="demo">Conexión Cast · video de muestra</option><option value="youtube">YouTube · experimental</option></select>
+      <p id="mode-note" class="hint"></p>
+      <div class="controls"><button id="connect" class="accent" disabled>Seleccionar Chromecast</button><button id="disconnect" disabled>Desconectar este navegador</button></div>
+      <p id="sdk-status" role="status" class="hint">Cargando Google Cast…</p>
+      <p class="notice">Conectar puede abrir otra aplicación en la TV. Desconectar este navegador no ordena detener la reproducción.</p>
+    </section>
+    <section class="card">
+      <div class="section-heading"><h2>Enviar a la pantalla</h2><span id="mode-label" class="tag">Video de muestra</span></div>
+      <form id="play-form"><div id="youtube-fields" hidden><label for="url">Enlace de YouTube</label><input id="url" type="url" maxlength="2048" placeholder="https://www.youtube.com/watch?v=…"></div>
+      <div class="play-row"><div><label for="position">Desde el segundo</label><input id="position" type="number" min="0" max="86400" step="any" placeholder="Tiempo del enlace o 0"></div><button id="load" class="accent" disabled>Reproducir muestra</button></div></form>
+      <p class="hint">Enviar contenido puede reemplazar la reproducción actual. El modo YouTube prueba una orden multimedia estándar: puede ser rechazada.</p>
+    </section>
+    <section class="card current">
+      <div class="section-heading"><h2>En la televisión</h2><span id="player" class="tag">Sin sesión</span></div>
+      <p id="current-video" class="video-name">Selecciona tu Chromecast</p>
+      <div class="timeline"><div id="progress"></div></div><div class="time-labels"><span id="time">—</span><span id="duration">—</span></div>
+      <p id="freshness" class="hint">Sin datos del receptor</p>
+      <div class="controls"><button id="pause" disabled>Pausar</button><button id="resume" disabled>Reanudar</button><button id="save" disabled>Guardar este punto</button></div>
+      <p class="notice">Guarda un punto solo al ver el contenido principal en la TV. Los anuncios no se distinguen con fiabilidad.</p>
+    </section>
+  </div><aside>
+    <section class="card device"><h2>Conexión directa</h2><p id="connection" class="device-state">Sin sesión</p><p class="hint">Render entrega esta página. Tu navegador envía las órdenes al Chromecast; no se usa el servidor Python.</p><p class="hint">Usa Chrome compatible con Cast y permite el acceso a la red local si lo solicita. El navegador integrado de una app puede no funcionar.</p></section>
+    <section class="card recovery"><span class="eyebrow">EN ESTE NAVEGADOR</span><h2>Tu punto guardado.</h2><p id="checkpoint">Todavía no guardaste un punto.</p><button id="recover" class="dark" disabled>Volver al punto</button><p class="hint">Se guarda solo en este navegador. No se sincroniza entre dispositivos ni se recupera automáticamente.</p><button id="clear" disabled>Borrar punto</button></section>
+    <section class="card"><h2>Resultado de la prueba</h2><p class="hint">La conexión Cast no demuestra que YouTube funcione. Comprueba en la TV el video, la pausa y la posición.</p><ol id="diagnostics" class="hint" aria-live="polite"></ol></section>
+  </aside></div>
+  <p id="feedback" role="status" aria-live="polite"></p>
+</main><footer>CAST WEB <span>Prueba con tu Chromecast.</span></footer>
+</body></html>

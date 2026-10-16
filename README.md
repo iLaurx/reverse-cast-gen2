@@ -2,6 +2,12 @@
 
 Entorno de investigación de un Chromecast de segunda generación mediante consultas de red, capturas y análisis estático. El dispositivo seleccionado está en `192.168.1.6`.
 
+## Prueba web para Render
+
+La carpeta `web-cast/` contiene una prueba independiente de **Render → navegador → Chromecast en tu Wi-Fi**, sin mantener una PC intermediaria encendida. Incluye conexión Cast, video de muestra, pausa/reanudación y un punto guardado por navegador. `render.yaml` publica únicamente esa carpeta como Static Site.
+
+**YouTube es experimental:** conectar con Cast no garantiza que su receptor acepte reproducir enlaces ni recuperar posiciones. El panel Python funcional de abajo se conserva; todavía no se ha demostrado equivalencia con esa integración. Consulta [publicación, límites y prueba en la TV](docs/cast-web.md).
+
 ## Panel web local
 
 Primera versión con FastAPI y una interfaz en español: enlaces de YouTube, posición inicial, IP configurable, estado reciente, pausa/reanudación, historial persistente y recuperación manual. La investigación y sus archivos originales se conservan más abajo.

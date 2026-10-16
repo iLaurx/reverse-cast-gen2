@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cast · Tu pantalla, a mano</title><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script></head>
+<body>
+<header><a class="brand" href="/" aria-label="Inicio Cast"><span class="logo" aria-hidden="true">▣</span> cast<span class="brand-dot">.</span></a><span class="local">EN TU RED LOCAL</span></header>
+<main>
+<section class="intro"><p class="eyebrow">DE LA PC A TU TELEVISIÓN</p><h1>Elige un video.<br><span>Disfrútalo en grande.</span></h1><p>Pega un enlace de YouTube y continúa en tu Chromecast.</p></section>
+<div class="layout">
+<div class="primary">
+<section class="card send"><div class="section-heading"><h2>Enviar a la pantalla</h2><span class="tag">YouTube</span></div>
+<form id="play-form"><label for="url">Enlace del video</label><input id="url" type="text" inputmode="url" placeholder="https://www.youtube.com/watch?v=…" required maxlength="2048" autocomplete="off"><div class="play-row"><div><label for="position">Desde el segundo <span class="optional">· opcional</span></label><input id="position" type="number" min="0" max="86400" step="any" placeholder="Tiempo del enlace o 0"></div><button class="accent" type="submit">Reproducir <span aria-hidden="true">↗</span></button></div><p class="hint">Iniciar o recuperar un video puede reemplazar la cola actual.</p></form></section>
+<section class="card current"><div class="section-heading"><h2>En la televisión</h2><span id="player" class="tag">Sin datos</span></div><p id="current-video" class="video-name">Esperando al Chromecast</p><div class="timeline"><div id="progress"></div></div><div class="time-labels"><span id="time">—</span><span id="duration">—</span></div><p id="media-age" class="hint">Sin observaciones recientes</p><div class="controls"><button id="pause" type="button" disabled>Pausar</button><button id="resume" type="button" disabled>Reanudar</button><button id="save" type="button" disabled>Guardar este punto</button></div><p class="notice">No podemos distinguir todos los anuncios. Guarda un punto solo cuando veas el video principal en la TV.</p></section>
+<section class="card"><div class="section-heading"><h2>Tu historial</h2><span class="optional">Guardado en esta PC</span></div><div id="history" class="history"><p class="hint">Tus videos y puntos guardados aparecerán aquí.</p></div></section>
+</div>
+<aside><section class="card device"><div class="section-heading"><h2>Chromecast</h2><span id="connection-dot" class="dot"></span></div><p id="connection" class="device-state">Conectando…</p><dl><dt>Aplicación activa</dt><dd id="app-name">—</dd><dt>Último estado recibido</dt><dd id="receiver-age">—</dd></dl><details><summary>Configurar conexión</summary><form id="host-form"><label for="host">IP del Chromecast</label><input id="host" value="192.168.1.6" required inputmode="decimal"><button type="submit">Guardar dirección</button></form><form id="key-form"><label for="key">Clave de acceso a la red</label><input id="key" type="password" autocomplete="off" placeholder="Solo si habilitaste una clave"><button type="submit">Usar clave</button></form><p class="hint">La clave permanece en esta pestaña hasta que la cierres.</p></details></section>
+<section class="card recovery"><span class="eyebrow">A TU RITMO</span><h2>Continúa donde ibas.</h2><p id="checkpoint">Guarda un punto del video para volver a él cuando lo necesites.</p><button id="recover" class="dark" type="button" disabled>Continuar donde iba</button><p class="hint">Tú decides cuándo volver. Nunca reabrimos YouTube automáticamente.</p></section><p class="footnote">Mantén esta PC encendida y conectada a la misma red que tu Chromecast.</p></aside>
+</div><p id="feedback" role="status" aria-live="polite"></p>
+</main><footer>CAST LOCAL <span>Una pantalla, a tu manera.</span></footer>
+</body></html>

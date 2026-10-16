@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+evidence/
+captures/
+firmware/
+extracted/
+*.gpr
+*.rep/
+
+data/
+.env
+

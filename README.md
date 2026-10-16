@@ -4,6 +4,8 @@ Entorno de investigación de un Chromecast de segunda generación mediante consu
 
 ## Prueba web para Render
 
+Abre [Cast web en Render](https://reverse-cast-web.onrender.com/) desde un navegador compatible conectado a la Wi-Fi del Chromecast. El sitio ya está publicado; la reproducción real y el modo YouTube requieren comprobarse con la TV.
+
 La carpeta `web-cast/` contiene una prueba independiente de **Render → navegador → Chromecast en tu Wi-Fi**, sin mantener una PC intermediaria encendida. Incluye conexión Cast, video de muestra, pausa/reanudación y un punto guardado por navegador. `render.yaml` publica únicamente esa carpeta como Static Site.
 
 **YouTube es experimental:** conectar con Cast no garantiza que su receptor acepte reproducir enlaces ni recuperar posiciones. El panel Python funcional de abajo se conserva; todavía no se ha demostrado equivalencia con esa integración. Consulta [publicación, límites y prueba en la TV](docs/cast-web.md).

@@ -16,6 +16,8 @@ Los controles dependen de un estado recibido hace menos de diez segundos y de la
 
 ## Publicación en Render
 
+Sitio publicado: [https://reverse-cast-web.onrender.com/](https://reverse-cast-web.onrender.com/). Se comprobó la carga HTTPS del panel y del SDK de Google Cast en el navegador, sin errores registrados en consola durante esa comprobación. El primer despliegue de `843c4c2` terminó como **Live**. Esto no prueba descubrimiento ni reproducción en el Chromecast del propietario.
+
 El `render.yaml` de la raíz define un **Static Site**, sin disco, base de datos, secretos ni servidor Python.
 
 Desde Render, crear un Blueprint a partir de este repositorio y revisar que publique `web-cast`. Alternativamente crear un **Static Site** manualmente con:
@@ -27,7 +29,7 @@ Desde Render, crear un Blueprint a partir de este repositorio y revisar que publ
 | Build Command | `node --check web-cast/app.mjs` |
 | Publish Directory | `web-cast` |
 
-No usar el inicio de FastAPI para este despliegue. Abrir la URL HTTPS que Render asigne; no se ha fijado una URL antes de que el servicio exista. No es necesario registrar el Default Media Receiver ni abrir puertos del router. No introducir claves del panel local en esta página.
+No usar el inicio de FastAPI para este despliegue. No es necesario registrar el Default Media Receiver ni abrir puertos del router. No introducir claves del panel local en esta página. La publicación inicial se creó desde el formulario Static Site; sus tres cabeceras se configuraron también en Render. El Blueprint queda disponible para reproducir la configuración en otro despliegue.
 
 ## Validación automatizada
 

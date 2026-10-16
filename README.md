@@ -6,7 +6,9 @@ Entorno de investigación de un Chromecast de segunda generación mediante consu
 
 Abre [Cast web en Render](https://reverse-cast-web.onrender.com/) desde un navegador compatible conectado a la Wi-Fi del Chromecast. El sitio ya está publicado; la reproducción real y el modo YouTube requieren comprobarse con la TV.
 
-La carpeta `web-cast/` contiene el panel de YouTube adaptado a celular, sin video de muestra ni cuadros de confirmación. El navegador conecta con el Chromecast en tu Wi-Fi y una API en Render envía los videos mediante la sesión MDX/Lounge. No necesitas mantener una PC intermediaria encendida. Incluye pausa/reanudación y un punto guardado por navegador. `render.yaml` define el sitio estático y la API Python.
+La carpeta `web-cast/` contiene el panel de YouTube adaptado a celular, sin video de muestra ni cuadros de confirmación. El navegador conecta con el Chromecast en tu Wi-Fi y una API en Render envía los videos mediante la sesión MDX/Lounge. No necesitas mantener una PC intermediaria encendida. Incluye pausa/reanudación, barra de volumen de 0 a 100 %, botones −/+ de cinco puntos, silenciar/activar sonido y un punto guardado por navegador. `render.yaml` define el sitio estático y la API Python.
+
+El volumen se controla directamente mediante la sesión Cast, sin pasar por el relay. El nivel se actualiza con lo que informa el receptor y no se envían cambios al conectar. Para publicar este cambio de volumen solo hace falta desplegar el sitio estático. Se verificó con pruebas simuladas; falta comprobarlo en la TV. Consulta [control de volumen](docs/cast-web.md#volumen).
 
 ### Omitir anuncios
 

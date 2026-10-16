@@ -4,7 +4,38 @@ const $ = id => document.getElementById(id);
 const fmt = n => Number.isFinite(n) ? `${Math.floor(n / 60)}:${String(Math.floor(n % 60)).padStart(2, '0')}` : '—';
 let context, ready = false, busy = false, observed = null, checkpoint = null, polling = false;
 let generation = 0;
+let volumeSession = null, volumeEditing = false;
 const session = () => context?.getCurrentSession();
+const volumeLevel = s => {
+  const level = s?.getVolume();
+  return Number.isFinite(level) && level >= 0 && level <= 1 ? level : null;
+};
+function renderVolume() {
+  const s = session(), level = volumeLevel(s), muted = s?.isMute();
+  const available = !!s && level !== null;
+  $('volume').disabled = busy || !available;
+  $('volume-down').disabled = busy || !available || level <= 0;
+  $('volume-up').disabled = busy || !available || level >= 1;
+  $('mute').disabled = busy || !s || typeof muted !== 'boolean';
+  $('mute').textContent = muted === true ? 'Activar sonido' : 'Silenciar';
+  $('mute').setAttribute('aria-pressed', String(muted === true));
+  if (!volumeEditing) {
+    $('volume').value = available ? Math.round(level * 100) : 0;
+    $('volume-value').textContent = available ? `${Math.round(level * 100)} %` : '—';
+  }
+  $('volume-status').textContent = !s ? 'Conecta tu Chromecast para ajustar el volumen.'
+    : !available ? 'El Chromecast todavía no informa su volumen.'
+    : muted === true ? 'Sonido silenciado. Pulsa Activar sonido para escucharlo.'
+    : 'Desliza la barra o usa − / + para ajustar de 5 en 5.';
+}
+function syncVolumeSession() {
+  const s = session();
+  if (s === volumeSession) return;
+  if (volumeSession) volumeSession.removeEventListener(cast.framework.SessionEventType.VOLUME_CHANGED, renderVolume);
+  volumeSession = s;
+  volumeEditing = false;
+  if (s) s.addEventListener(cast.framework.SessionEventType.VOLUME_CHANGED, renderVolume);
+}
 const say = text => { $('feedback').textContent = text; };
 function log(text) {
   const item = document.createElement('li'); item.textContent = text;
@@ -18,6 +49,7 @@ function current() {
 }
 function render() {
   const s = session(), o = current(), m = o?.media;
+  renderVolume();
   $('connect').disabled = !ready || busy || !!s;
   $('disconnect').disabled = !s || busy;
   $('load').disabled = !s || busy;
@@ -79,6 +111,35 @@ async function load(id, time) {
     say('El receptor reporta el video en reproducción cerca del punto solicitado. Confírmalo en la TV.'); log('Receptor reporta video y posición solicitados.');
   } else { say('Orden aceptada; video y posición todavía sin confirmar. Revisa la TV.'); log('Orden aceptada sin confirmar reproducción ni posición.'); }
 }
+function setVolume(percent) {
+  volumeEditing = false;
+  if (busy) { renderVolume(); return; }
+  return operation(async () => {
+    const s = session(), g = generation;
+    if (!s || volumeLevel(s) === null) throw {code: 'volume_unavailable'};
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) throw {code: 'invalid_volume'};
+    await s.setVolume(percent / 100);
+    if (s !== session() || g !== generation) return;
+    say(`Volumen solicitado: ${Math.round(percent)} %.${s.isMute() ? ' El sonido sigue silenciado.' : ''}`);
+  });
+}
+$('volume').oninput = () => {
+  if ($('volume').disabled) return;
+  volumeEditing = true;
+  $('volume-value').textContent = `${$('volume').value} %`;
+};
+$('volume').onchange = () => setVolume(Number($('volume').value));
+$('volume').onblur = () => { volumeEditing = false; renderVolume(); };
+for (const [id, step] of [['volume-down', -5], ['volume-up', 5]]) $(id).onclick = () => {
+  const level = volumeLevel(session());
+  if (level !== null && !$(id).disabled) return setVolume(Math.max(0, Math.min(100, Math.round(level * 100) + step)));
+};
+$('mute').onclick = () => operation(async () => {
+  const s = session(), g = generation, muted = s?.isMute();
+  if (!s || typeof muted !== 'boolean') throw {code: 'volume_unavailable'};
+  await s.setMute(!muted);
+  if (s === session() && g === generation) say(muted ? 'Activar sonido: orden enviada.' : 'Silenciar: orden enviada.');
+});
 $('connect').onclick = () => {
   operation(async () => { await context.requestSession(); log('Sesión Cast abierta.'); say('Conectado. Ahora puedes probar la reproducción.'); });
 };
@@ -118,11 +179,12 @@ $('clear').onclick = () => {
 window.__onGCastApiAvailable = available => {
   if (!available) { $('sdk-status').textContent = 'Google Cast no está disponible en este navegador. Prueba Chrome compatible con Cast.'; return; }
   context = cast.framework.CastContext.getInstance(); ready = true;
-  context.addEventListener(cast.framework.CastContextEventType.SESSION_STATE_CHANGED, () => { generation++; observed = null; render(); poll(); });
+  context.addEventListener(cast.framework.CastContextEventType.SESSION_STATE_CHANGED, () => { generation++; observed = null; syncVolumeSession(); render(); poll(); });
   context.addEventListener(cast.framework.CastContextEventType.CAST_STATE_CHANGED, () => {
     $('sdk-status').textContent = context.getCastState() === cast.framework.CastState.NO_DEVICES_AVAILABLE ? 'No se detectan dispositivos. Revisa la Wi-Fi, los permisos de red local y que Chromecast esté encendido.' : 'Google Cast disponible. Selecciona tu Chromecast.';
   });
   context.setOptions({receiverApplicationId: '233637DE', autoJoinPolicy: chrome.cast.AutoJoinPolicy.PAGE_SCOPED});
+  syncVolumeSession();
   render(); $('sdk-status').textContent = 'Listo para conectar con tu Chromecast.';
 };
 render();

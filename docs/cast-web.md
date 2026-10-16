@@ -23,6 +23,14 @@ Se retiraron el video de muestra, el selector de modos y los cuadros `confirm` d
 
 Desconectar el navegador no envía STOP a la TV. Cerrar la página impide seguir actualizando el estado o ejecutar órdenes. Chrome en iOS no admite Web Sender; los navegadores integrados en otras apps pueden no exponer Cast.
 
+## Volumen
+
+En **En tu televisión**, la barra **Volumen del Chromecast** permite elegir de 0 a 100 %. Al deslizar se muestra el valor elegido y al soltar se envía una sola orden. Los botones **−** y **+** bajan o suben cinco puntos sin salir del rango; **Silenciar / Activar sonido** cambia el silencio por separado. Ajustar el nivel mientras está silenciado conserva el silencio y la interfaz lo indica.
+
+Se usa directamente la [API CastSession de Google Cast](https://developers.google.com/cast/docs/reference/web_sender/cast.framework.CastSession): `getVolume`, `setVolume`, `isMute`, `setMute` y el evento `VOLUME_CHANGED`. No requiere un video identificado ni despertar el relay. El volumen se refleja al conectar y cuando el receptor informa cambios; conectar, consultar estado o desconectar no envía órdenes de volumen. Los controles se deshabilitan sin sesión, mientras se envía otra orden o si el nivel no está disponible. Los errores se muestran dentro del panel, sin reintentos automáticos.
+
+Este cambio corresponde al panel `web-cast/`; el panel Python local se conserva. Para publicarlo en Render basta desplegar el sitio estático. Las 17 pruebas JavaScript pasan con un receptor simulado e incluyen normalización 0–100 a 0–1, límites, silencio, sincronización, desconexión, ausencia de cambios automáticos y rechazo de órdenes. No se modificó el volumen del Chromecast físico durante la validación; el resultado audible sigue pendiente de comprobar en la TV.
+
 ## Omitir anuncios
 
 La revisión del código identifica tres capas: el navegador mantiene la sesión Cast con el receptor YouTube (`233637DE`); MDX obtiene un `screenId` temporal; el relay usa ese identificador para vincular un control Lounge y enviar órdenes HTTPS a YouTube. El Chromecast reproduce el contenido; Render envía las órdenes y no transmite el video ni se conecta a la IP privada de la TV. No hay un volcado del firmware que permita describir su implementación interna completa.

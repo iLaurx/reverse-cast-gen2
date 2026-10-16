@@ -28,6 +28,11 @@
       <p id="current-video" class="video-name">Conecta tu Chromecast para empezar</p>
       <div class="timeline"><div id="progress"></div></div><div class="time-labels"><span id="time">—</span><span id="duration">—</span></div>
       <p id="freshness" class="hint">Sin datos del receptor</p>
+      <div class="volume-panel">
+        <div class="volume-heading"><label for="volume">Volumen del Chromecast</label><output id="volume-value" for="volume">—</output></div>
+        <div class="volume-row"><button id="volume-down" type="button" aria-label="Bajar volumen 5 puntos" disabled>−</button><input id="volume" type="range" min="0" max="100" step="1" value="0" aria-describedby="volume-status" disabled><button id="volume-up" type="button" aria-label="Subir volumen 5 puntos" disabled>+</button><button id="mute" type="button" aria-pressed="false" disabled>Silenciar</button></div>
+        <p id="volume-status" class="hint" role="status">Conecta tu Chromecast para ajustar el volumen.</p>
+      </div>
       <div class="controls"><button id="pause" disabled>Pausar</button><button id="resume" disabled>Reanudar</button><button id="save" disabled>Guardar punto sin anuncios</button></div>
       <div class="controls"><button id="skip-ad" type="button" class="accent" aria-describedby="ad-status" disabled>Omitir anuncio</button></div>
       <p id="ad-status" class="hint" role="status">Cuando aparezca «Omitir anuncio» en la TV, pulsa el botón. Algunos anuncios no se pueden omitir.</p>

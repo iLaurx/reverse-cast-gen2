@@ -24,15 +24,21 @@ test('saved points accept only the expected receiver and content', () => {
 async function harness({storageBlocked = false} = {}) {
   const elements = new Map();
   function el(id) {
-    if (!elements.has(id)) elements.set(id, {value: id === 'mode' ? 'demo' : '', textContent: '', disabled: false, style: {}, children: [], prepend(item) { this.children.unshift(item); }, remove() {}});
+    if (!elements.has(id)) elements.set(id, {value: id === 'mode' ? 'demo' : '', textContent: '', disabled: false, style: {}, children: [], setAttribute(name, value) { this[name] = value; }, prepend(item) { this.children.unshift(item); }, remove() {}});
     return elements.get(id);
   }
   const timers = [], intervals = [], listeners = {}, storage = new Map();
   let active = null, loads = 0, relays = 0, skips = 0, rejectLoad = false, getterFails = false;
+  let level = .4, muted = false, rejectVolume = false;
+  const volumeCalls = [], muteCalls = [], volumeListeners = new Set();
   const media = {media: {contentId: 'abcdefghijk', duration: 600}, currentTime: 50, playerState: 'PLAYING', supportsCommand: () => true,
     getStatus(_, ok, fail) { getterFails ? fail({code: 'timeout'}) : ok(); },
     pause(_, ok) { this.playerState = 'PAUSED'; ok(); }, play(_, ok) { this.playerState = 'PLAYING'; ok(); }};
   const castSession = {getCastDevice: () => ({friendlyName: 'Receptor simulado'}), getMediaSession: () => media,
+    getVolume: () => level, isMute: () => muted,
+    addEventListener(_, fn) { volumeListeners.add(fn); }, removeEventListener(_, fn) { volumeListeners.delete(fn); },
+    async setVolume(value) { volumeCalls.push(value); if (rejectVolume) throw {code: 'volume_failed'}; level = value; for (const fn of volumeListeners) fn(); },
+    async setMute(value) { muteCalls.push(value); muted = value; for (const fn of volumeListeners) fn(); },
     async loadMedia() { loads++; if (rejectLoad) throw {code: 'load_media_failed'}; }};
   const context = {getCurrentSession: () => active, setOptions() {}, getCastState: () => 'AVAILABLE',
     addEventListener(event, callback) { listeners[event] = callback; }, async requestSession() { active = castSession; listeners.session(); },
@@ -43,14 +49,61 @@ async function harness({storageBlocked = false} = {}) {
     confirm: () => { throw Error('Unexpected popup'); }, localStorage: {getItem: k => storage.get(k), setItem(k, v) { if (storageBlocked) throw Error(); storage.set(k, v); }, removeItem: k => storage.delete(k)},
     document: {getElementById: el, createElement: () => ({}), head: {append() {}}},
     chrome: {cast: {AutoJoinPolicy: {PAGE_SCOPED: 'PAGE'}, media: {DEFAULT_MEDIA_RECEIVER_APP_ID: 'DEFAULT', MediaCommand: {PAUSE: 'pause'}, MediaInfo: function(id, type) { this.contentId = id; this.contentType = type; }, LoadRequest: function(info) { this.media = info; }}}},
-    cast: {framework: {CastContext: {getInstance: () => context}, CastContextEventType: {SESSION_STATE_CHANGED: 'session', CAST_STATE_CHANGED: 'cast'}, CastState: {NO_DEVICES_AVAILABLE: 'NONE'}}}};
+    cast: {framework: {CastContext: {getInstance: () => context}, SessionEventType: {VOLUME_CHANGED: 'volume'}, CastContextEventType: {SESSION_STATE_CHANGED: 'session', CAST_STATE_CHANGED: 'cast'}, CastState: {NO_DEVICES_AVAILABLE: 'NONE'}}}};
   sandbox.window = sandbox; sandbox.isSecureContext = true;
   const source = (await readFile(new URL('../web-cast/app.mjs', import.meta.url), 'utf8')).replace(/^import .*;\r?\n/gm, '');
   vm.runInNewContext(source, sandbox);
   const tick = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
   const connect = async () => { sandbox.__onGCastApiAvailable(true); el('connect').onclick(); await tick(); };
-  return {el, sandbox, tick, connect, timers, intervals, media, storage, loads: () => loads, relays: () => relays, skips: () => skips, failLoad() { rejectLoad = true; }, failStatus() { getterFails = true; }};
+  return {el, sandbox, tick, connect, timers, intervals, media, storage, volumeCalls, muteCalls, volumeListeners,
+    receiverVolume(value) { level = value; for (const fn of volumeListeners) fn(); }, failVolume() { rejectVolume = true; },
+    loads: () => loads, relays: () => relays, skips: () => skips, failLoad() { rejectLoad = true; }, failStatus() { getterFails = true; }};
 }
+
+test('volume reflects receiver, stays disabled offline and never sends on connect or poll', async () => {
+  const h = await harness();
+  for (const id of ['volume', 'volume-down', 'volume-up', 'mute']) assert.equal(h.el(id).disabled, true);
+  await h.connect();
+  assert.equal(h.el('volume').value, 40); assert.equal(h.el('volume-value').textContent, '40 %');
+  h.receiverVolume(.72); assert.equal(h.el('volume').value, 72);
+  h.intervals[0](); await h.tick(); assert.deepEqual(h.volumeCalls, []);
+  h.el('disconnect').onclick(); assert.equal(h.volumeListeners.size, 0);
+  assert.equal(h.el('volume').disabled, true); assert.equal(h.el('volume-value').textContent, '—');
+});
+
+test('drag previews without sending or being overwritten; release sends one normalized volume', async () => {
+  const h = await harness(); await h.connect();
+  h.el('volume').value = '65'; h.el('volume').oninput();
+  h.receiverVolume(.45); h.intervals[0](); await h.tick();
+  assert.equal(h.el('volume').value, '65'); assert.equal(h.el('volume-value').textContent, '65 %');
+  assert.deepEqual(h.volumeCalls, []);
+  h.el('volume').onchange(); await h.tick();
+  assert.deepEqual(h.volumeCalls, [.65]); assert.equal(h.el('volume').disabled, false);
+  assert.equal(h.loads(), 0); assert.equal(h.relays(), 0);
+});
+
+test('volume buttons clamp at bounds and work without media metadata; mute is explicit', async () => {
+  const h = await harness(); await h.connect(); h.failStatus(); h.intervals[0](); await h.tick();
+  h.receiverVolume(.98); h.el('volume-up').onclick(); await h.tick();
+  assert.deepEqual(h.volumeCalls, [1]); assert.equal(h.el('volume-up').disabled, true);
+  h.receiverVolume(.02); h.el('volume-down').onclick(); await h.tick();
+  assert.deepEqual(h.volumeCalls, [1, 0]); assert.equal(h.el('volume-down').disabled, true);
+  h.el('mute').onclick(); await h.tick();
+  assert.equal(h.el('mute').textContent, 'Activar sonido'); assert.equal(h.el('mute')['aria-pressed'], 'true');
+  h.el('volume-up').onclick(); await h.tick(); assert.deepEqual(h.muteCalls, [true]);
+  h.el('mute').onclick(); await h.tick(); assert.deepEqual(h.muteCalls, [true, false]);
+});
+
+test('unavailable volume, invalid input and rejected commands do not claim success or retry', async () => {
+  const h = await harness(); await h.connect();
+  for (const value of [null, NaN, -1, 2]) { h.receiverVolume(value); assert.equal(h.el('volume').disabled, true); }
+  h.receiverVolume(.4);
+  h.el('volume').value = '101'; h.el('volume').onchange(); await h.tick(); assert.deepEqual(h.volumeCalls, []);
+  h.failVolume(); h.el('volume').value = '60'; h.el('volume').onchange();
+  h.el('volume-up').onclick(); await h.tick();
+  assert.deepEqual(h.volumeCalls, [.6]); assert.match(h.el('feedback').textContent, /No se completó/);
+  assert.equal(h.el('volume').value, 40); assert.equal(h.el('volume').disabled, false);
+});
 test('unavailable SDK keeps all playback controls disabled', async () => {
   const h = await harness(); h.sandbox.__onGCastApiAvailable(false);
   for (const id of ['connect', 'load', 'pause', 'resume', 'save', 'recover', 'skip-ad']) assert.equal(h.el(id).disabled, true);
